@@ -5,3 +5,4 @@ openai==0.28.0
 chromadb==0.4.10
 sentence_transformers==2.2.2
 unstructured[pdf]
+pypdf
