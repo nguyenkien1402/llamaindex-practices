@@ -1,3 +1,6 @@
+pdfservices-sdk
+camelot-py
+cryptography==3.4.6
 llama-index==0.8.28
 langchain==0.0.292
 transformers==4.33.2
@@ -6,4 +9,3 @@ chromadb==0.4.10
 sentence_transformers==2.2.2
 unstructured[pdf]
 pypdf
-pdfservices-sdk
