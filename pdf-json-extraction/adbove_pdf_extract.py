@@ -35,4 +35,4 @@ import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
-openai.api_key = "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"
+openai.api_key = ""
