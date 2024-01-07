@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket
+    Default: 'e2e-rag-file-uploaded'
+
+Resources:
+  E2ERAGFileUploadedSQS:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      VisibilityTimeout: 900 
+
+  S3UploadBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Queue: !GetAtt E2ERAGFileUploadedSQS.Arn
+    DependsOn:
+      - QueuePolicy
+  
+  S3BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3UploadBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: '*'
+            Effect: Allow
+            Resource:
+              - !GetAtt S3UploadBucket.Arn
+              - !Sub
+                  - '${varS3BucketArn}/*'
+                  - varS3BucketArn: !GetAtt S3UploadBucket.Arn
+            Principal:
+              AWS: 
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+
+  QueuePolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service: "s3.amazonaws.com"
+            Action:
+              - 'SQS:SendMessage'
+            Resource: !GetAtt E2ERAGFileUploadedSQS.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Join ["",['arn:aws:s3:::',!Ref BucketName]]
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Queues:
+        - !Ref E2ERAGFileUploadedSQS
+
+  LiveIndexingLambdaFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: main.main
+      Role: !GetAtt LiveIndexingLambdaFunctionExecutionRole.Arn
+      FunctionName: LiveIndexingFunction
+      Runtime: python3.10
+      Timeout: 900
+      MemorySize: 512
+      CodeUri: functions/indexing/
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt E2ERAGFileUploadedSQS.Arn
+    DependsOn: LiveIndexingLambdaFunctionExecutionRole
+
+  LiveIndexingLambdaFunctionExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: LambdaS3SQSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'sqs:*'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !GetAtt S3UploadBucket.Arn
+                  - !Sub
+                    - '${varS3BucketArn}/*'
+                    - varS3BucketArn: !GetAtt S3UploadBucket.Arn
+                  - !GetAtt E2ERAGFileUploadedSQS.Arn
+                  - 'arn:aws:logs:*:*:*'

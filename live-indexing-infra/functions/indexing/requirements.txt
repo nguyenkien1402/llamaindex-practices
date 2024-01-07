@@ -1,0 +1,4 @@
+llama-index
+requests
+urllib3<2
+pypdf
